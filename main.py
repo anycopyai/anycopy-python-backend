@@ -62,8 +62,29 @@ def generate_ad_copy(prompt):
 # Function to cache data locally
 def cache_data(data, filename):
     try:
+        # Read existing JSON data from the file, if any
+        with open(filename, 'r') as file:
+            existing_data = file.read().strip()
+        
+        # Check if data already exists in the file
+        if existing_data:
+            # Remove the closing square bracket ']' from the end
+            existing_data = existing_data[:-1]
+            # Add a comma if necessary
+            if existing_data.endswith(','):
+                existing_data += '\n'
+            else:
+                existing_data += ',\n'
+        
+        # Write the updated JSON data to the file
         with open(filename, 'w') as file:
+            # If data already exists, write it back along with a comma
+            if existing_data:
+                file.write(existing_data)
+            # Add the new data
             json.dump(data, file)
+            # Add a closing square bracket to complete the JSON array
+            file.write(']')
     except Exception as e:
         print(f"Error caching data: {e}")
 
@@ -80,23 +101,50 @@ def load_cached_data(filename):
 # Main function
 def generate_dynamic_ad_copy(title, meta_description, website):
     # Step 1: Check if cached data exists
+    website = website.lower()
     cache_filename = 'cached_data.json'
     if os.path.exists(cache_filename):
         cached_data = load_cached_data(cache_filename)
+        # print(cached_data)
         if cached_data:
-            title, meta_description, keywords = cached_data
-    else:
-        # Step 1: Scrape webpage content
-        title, meta_description = scrape_webpage(website)
+            for data in cached_data:
+                # print(data)
+                if data['website'] == website:
+                    # If found, load data into variables
+                    website = data['website']
+                    title = data['title']
+                    meta_description = data['meta_description']
+                    keywords = data['keywords']
+                    print("Getting data from cache file")
+                    break
+            
+            else:
+                # Step 1: Scrape webpage content
+                title, meta_description = scrape_webpage(website)
 
-        # Step 2: Extract keywords
-        if title and meta_description:
-            keywords = extract_keywords_nltk(title + ' ' + meta_description)
+                # Step 2: Extract keywords
+                if title and meta_description:
+                    keywords = extract_keywords_nltk(title + ' ' + meta_description)
 
-            # Step 3: Cache scraped data and keywords
-            cache_data((title, meta_description, keywords), cache_filename)
+                    # Step 3: Cache scraped data and keywords
+                    cache_data({"website":website, "title": title, "meta_description": meta_description, "keywords": keywords}, cache_filename)
+                    print("data added to cached file")
+                else:
+                    raise HTTPException(status_code=500, detail="Error processing webpage content")
+        
         else:
-            raise HTTPException(status_code=500, detail="Error processing webpage content")
+            # Step 1: Scrape webpage content
+            title, meta_description = scrape_webpage(website)
+
+            # Step 2: Extract keywords
+            if title and meta_description:
+                keywords = extract_keywords_nltk(title + ' ' + meta_description)
+
+                # Step 3: Cache scraped data and keywords
+                cache_data({"website":website, "title": title, "meta_description": meta_description, "keywords": keywords}, cache_filename)
+                print("data added to cached file")
+            else:
+                raise HTTPException(status_code=500, detail="Error processing webpage content")
 
     # Step 4: Prepare prompt for OpenAI 
     prompt = f"""
@@ -119,12 +167,14 @@ def generate_dynamic_ad_copy(title, meta_description, website):
                 Headline: [Title]
                 Text: [Meta Description]
                 Link: [Website]
+
                 Google Ads Copy:
 
                 Headline 1: [Title]
                 Headline 2: [Meta Description]
                 Description: [Meta Description]
                 URL: [Website]
+
                 Bing Ads Copy:
 
                 Title: [Title]
