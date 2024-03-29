@@ -78,7 +78,7 @@ def load_cached_data(filename):
         return None
 
 # Main function
-def generate_dynamic_ad_copy(need_to_write, how_often, company_name, website, industry, business_size, service_name, description, audience, keyword):
+def generate_dynamic_ad_copy(title, meta_description, website):
     # Step 1: Check if cached data exists
     cache_filename = 'cached_data.json'
     if os.path.exists(cache_filename):
@@ -100,22 +100,40 @@ def generate_dynamic_ad_copy(need_to_write, how_often, company_name, website, in
 
     # Step 4: Prepare prompt for OpenAI 
     prompt = f"""
-    You have been tasked with writing compelling ad copy for {service_name} offered by {company_name}, a {business_size} company in the {industry} industry.
+                Create engaging ad copies suitable for Instagram, Facebook, Google Ads, Bing Ads, and Twitter based on the content of the provided webpage. Extract the following details from the webpage:
 
-    **Service Details:**
-    - Service Name: {service_name}
-    - Description: {description}
-    - Website: {website}
+                Title: {title}.
+                Meta Description: {meta_description}
+                Website: {website}
+                Craft persuasive ad copies tailored to each platform, ensuring they effectively capture the essence of the webpage and entice users to engage further.
 
-    **Target Audience:**
-    - Demographic: {audience}
-    - Interests: [Specify interests of your target audience]
+                Format the output as follows:
 
-    **Keywords:**
-    - How Often: {how_often}
-    - Need to Write: {need_to_write}
+                Instagram Ad Copy:
 
-    Generate attention-grabbing ad copy variations tailored to the provided information and keywords for Instagram, Facebook, Google ads, Bing Ads and twitter.
+                Caption: [Title]
+                Description: [Meta Description]
+                Link: [Website]
+                Facebook Ad Copy:
+
+                Headline: [Title]
+                Text: [Meta Description]
+                Link: [Website]
+                Google Ads Copy:
+
+                Headline 1: [Title]
+                Headline 2: [Meta Description]
+                Description: [Meta Description]
+                URL: [Website]
+                Bing Ads Copy:
+
+                Title: [Title]
+                Description 1: [Meta Description]
+                URL: [Website]
+                Twitter Ad Copy:
+
+                Tweet: [Title] [Meta Description] [Website]
+                Experiment with different ad angles, calls-to-action, and platform-specific optimizations to maximize engagement. Ensure compliance with each platform's ad policies and character limits.
 """
 
     # Step 5: Generate ad copy using OpenAI
@@ -128,15 +146,18 @@ def generate_dynamic_ad_copy(need_to_write, how_often, company_name, website, in
 # Define POST endpoint
 @app.post("/generate-ad-copy")
 async def generate_ad_copy_from_url(request_data: URLRequest):
-    need_to_write = request_data.need_to_write
-    how_often = request_data.how_often
-    company_name = request_data.company_name
+    # need_to_write = request_data.need_to_write
+    # how_often = request_data.how_often
+    # company_name = request_data.company_name
     website = request_data.website
-    industry = request_data.industry
-    business_size = request_data.business_size
-    service_name = request_data.service_name
-    description = request_data.description
-    audience = request_data.audience
-    keywords = request_data.keywords
-    ad_copy = generate_dynamic_ad_copy(need_to_write, how_often, company_name, website, industry, business_size, service_name, description, audience, keywords)
+    # industry = request_data.industry
+    # business_size = request_data.business_size
+    # service_name = request_data.service_name
+    # description = request_data.description
+    # audience = request_data.audience
+    # keywords = request_data.keywords
+    title, meta_description = scrape_webpage(website)
+
+    ad_copy = generate_dynamic_ad_copy(title, meta_description, website )
+    ad_copy = ad_copy.replace("\n", " ")
     return {"ad_copy": ad_copy}
