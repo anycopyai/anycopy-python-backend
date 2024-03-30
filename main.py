@@ -7,6 +7,10 @@ import openai
 import os
 import json
 from schema import URLRequest
+from selenium import webdriver
+from selenium.common.exceptions import NoSuchElementException
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 
 
 # Initialize FastAPI app
@@ -24,18 +28,41 @@ openai.api_key      = os.getenv("AZURE_OPENAI_API_KEY")
 # Function to scrape webpage content
 def scrape_webpage(url):
     try:
-        response = requests.get(url)
-        response.raise_for_status()  # Raise an exception for 4xx or 5xx errors
-        soup = BeautifulSoup(response.text, 'html.parser')
+        # Set up Selenium Chrome webdriver
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")  # Run headless browser
+        service = Service(r'chromedriver-win64/chromedriver.exe')  # Specify path to chromedriver executable
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+        
+        # Load the webpage
+        driver.get(url)
+        
+        # Get webpage HTML source
+        html_source = driver.page_source
+        
+        # Close the webdriver
+        driver.quit()
+        
+        # Parse HTML with BeautifulSoup
+        soup = BeautifulSoup(html_source, 'html.parser')
+        
+        # Extract title
         title = soup.title.string.strip()
-        meta_description = soup.find('meta', attrs={'name': 'description'})
-        if meta_description:
-            meta_description = meta_description['content'].strip()
-        else:
-            meta_description = ""
+        
+        # Extract meta description
+        meta_description = ""
+        try:
+            meta_tag = soup.find('meta', attrs={'name': 'description'})
+            if meta_tag:
+                meta_description = meta_tag['content'].strip()
+        except NoSuchElementException:
+            pass
+        
         return title, meta_description
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error scraping webpage: {e}")
+
 
 # Function to extract keywords using NLTK
 def extract_keywords_nltk(text):
