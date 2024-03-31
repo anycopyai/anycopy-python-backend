@@ -25,43 +25,43 @@ openai.api_version  = "2023-09-15-preview"
 openai.api_key      = os.getenv("AZURE_OPENAI_API_KEY")
 
 
-# Function to scrape webpage content
+
 def scrape_webpage(url):
     try:
-        # Set up Selenium Chrome webdriver
-        chrome_options = Options()
-        chrome_options.add_argument("--headless")  # Run headless browser
-        service = Service(r'chromedriver-win64/chromedriver.exe')  # Specify path to chromedriver executable
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-        
-        # Load the webpage
-        driver.get(url)
-        
-        # Get webpage HTML source
-        html_source = driver.page_source
-        
-        # Close the webdriver
-        driver.quit()
-        
+        # Send GET request with a custom User-Agent header
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+        }
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()  # Raise an exception for 4xx or 5xx errors
+
         # Parse HTML with BeautifulSoup
-        soup = BeautifulSoup(html_source, 'html.parser')
-        
+        soup = BeautifulSoup(response.text, 'html.parser')
+
         # Extract title
         title = soup.title.string.strip()
-        
+
         # Extract meta description
         meta_description = ""
-        try:
-            meta_tag = soup.find('meta', attrs={'name': 'description'})
-            if meta_tag:
-                meta_description = meta_tag['content'].strip()
-        except NoSuchElementException:
-            pass
-        
+        meta_tag = soup.find('meta', attrs={'name': 'description'})
+        if meta_tag:
+            meta_description = meta_tag['content'].strip()
+
         return title, meta_description
-        
+
+    except requests.HTTPError as e:
+        # Handle HTTP errors
+        if e.response.status_code == 403:
+            # Website is blocking access, handle accordingly
+            print("Access to the website is forbidden.")
+        else:
+            raise HTTPException(status_code=e.response.status_code, detail=f"HTTP Error: {e}")
+
     except Exception as e:
+        # Handle other exceptions
         raise HTTPException(status_code=500, detail=f"Error scraping webpage: {e}")
+
+
 
 
 # Function to extract keywords using NLTK
@@ -89,29 +89,37 @@ def generate_ad_copy(prompt):
 # Function to cache data locally
 def cache_data(data, filename):
     try:
-        # Read existing JSON data from the file, if any
-        with open(filename, 'r') as file:
-            existing_data = file.read().strip()
-        
-        # Check if data already exists in the file
-        if existing_data:
-            # Remove the closing square bracket ']' from the end
-            existing_data = existing_data[:-1]
-            # Add a comma if necessary
-            if existing_data.endswith(','):
-                existing_data += '\n'
-            else:
-                existing_data += ',\n'
-        
-        # Write the updated JSON data to the file
-        with open(filename, 'w') as file:
-            # If data already exists, write it back along with a comma
+        if os.path.exists(filename):
+            # Read existing JSON data from the file, if any
+            with open(filename, 'r') as file:
+                existing_data = file.read().strip()
+            
+            # Check if data already exists in the file
             if existing_data:
-                file.write(existing_data)
-            # Add the new data
-            json.dump(data, file)
-            # Add a closing square bracket to complete the JSON array
-            file.write(']')
+                # Remove the closing square bracket ']' from the end
+                existing_data = existing_data[:-1]
+                # Add a comma if necessary
+                if existing_data.endswith(','):
+                    existing_data += '\n'
+                else:
+                    existing_data += ',\n'
+            
+            # Write the updated JSON data to the file
+            with open(filename, 'w') as file:
+                # If data already exists, write it back along with a comma
+                if existing_data:
+                    file.write(existing_data)
+                # Add the new data
+                json.dump(data, file)
+                # Add a closing square bracket to complete the JSON array
+                file.write(']')
+        else:
+            with open(filename, 'w') as file:
+                file.write('[')
+                json.dump(data,file)
+                file.write(']')
+                file.close()
+
     except Exception as e:
         print(f"Error caching data: {e}")
 
@@ -172,6 +180,19 @@ def generate_dynamic_ad_copy(title, meta_description, website):
                 print("data added to cached file")
             else:
                 raise HTTPException(status_code=500, detail="Error processing webpage content")
+    else:
+        # Step 1: Scrape webpage content
+        title, meta_description = scrape_webpage(website)
+
+        # Step 2: Extract keywords
+        if title and meta_description:
+            keywords = extract_keywords_nltk(title + ' ' + meta_description)
+
+            # Step 3: Cache scraped data and keywords
+            cache_data({"website":website, "title": title, "meta_description": meta_description, "keywords": keywords}, cache_filename)
+            print("data added to cached file")
+        else:
+            raise HTTPException(status_code=500, detail="Error processing webpage content")
 
     # Step 4: Prepare prompt for OpenAI 
     prompt = f"""
@@ -223,16 +244,9 @@ def generate_dynamic_ad_copy(title, meta_description, website):
 # Define POST endpoint
 @app.post("/generate-ad-copy")
 async def generate_ad_copy_from_url(request_data: URLRequest):
-    # need_to_write = request_data.need_to_write
-    # how_often = request_data.how_often
-    # company_name = request_data.company_name
+
     website = request_data.website
-    # industry = request_data.industry
-    # business_size = request_data.business_size
-    # service_name = request_data.service_name
-    # description = request_data.description
-    # audience = request_data.audience
-    # keywords = request_data.keywords
+
     title, meta_description = scrape_webpage(website)
 
     ad_copy = generate_dynamic_ad_copy(title, meta_description, website )
